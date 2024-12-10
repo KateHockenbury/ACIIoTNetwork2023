@@ -1,0 +1,65 @@
+<!--this will be the main page to get to the other vizualizations-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Visualization Website</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            padding-top: 50px;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .button {
+            background-color:rgb(29, 111, 178);
+            color: white;
+            border: none;
+            padding: 15px 32px;
+            text-align: center;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 20px;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #2280cc;
+        }
+        .image-container {
+            margin-top: 30px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Welcome to the Data Visualization Website of<br>
+    the Army Cyber Institute's IoT Network Traffic Dataset (2023)</h1>
+
+    <div class="container">
+        <button class="button" onclick="window.location.href='flagbarchart.html';">Open Flags Bar Chart</button>
+       
+        <button class="button" onclick="window.location.href='networkSRC-DST.html';">Open IP Network Diagram</button>
+    
+        <button class="button" onclick="window.location.href='scatterplot.html';">Open Packet Scatter Plot</button>
+
+    </div>
+    <h3>Created by Kate Hockenbury</h3>
+   
+</body>
+</html>

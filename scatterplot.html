@@ -1,0 +1,200 @@
+<!DOCTYPE html> 
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scatter Plot with Regression Lines</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            height: 100vh;
+            margin-top: 50px;
+        }
+        .tooltip {
+            position: absolute;
+            background-color: white;
+            border: 1px solid black;
+            border-radius: 5px;
+            padding: 5px;
+            font-size: 12px;
+            pointer-events: none;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+        }
+        .legend {
+            font-size: 14px;
+        }
+        .line-legend {
+            stroke-width: 2;
+            fill: none;
+        }
+    </style>
+</head>
+<body>
+    <button onclick="window.location.href='index.html'">Back to Main Page</button>
+    <script>
+        // Set dimensions and margins
+        const width = 800;
+        const height = 600;
+        const margin = {top: 50, right: 50, bottom: 50, left: 50};
+
+        // Create SVG container
+        const svg = d3.select("body")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        // Group for scatter plot
+        const plotArea = svg.append("g")
+            .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+
+        // Create a div element for the tooltip
+        const tooltip = d3.select("body")
+            .append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // Load CSV data
+        d3.csv("ACI-IoT-2023 - Packet.csv").then(data => {
+            // Parse data and handle NaN values
+            data.forEach(d => {
+                d["Total Fwd Packet"] = +d["Total Fwd Packet"];
+                d["Total Bwd packets"] = +d["Total Bwd packets"]; // Ensure it's a number
+            });
+
+            // Remove duplicates based on the combination of Total Fwd Packet and Total Bwd packets
+            const uniqueData = Array.from(
+                new Map(
+                    data.map(d => [
+                        `${d["Total Fwd Packet"]}-${d["Total Bwd packets"]}`, // Unique key
+                        d
+                    ])
+                ).values()
+            );
+
+            // Create scales with fixed domains
+            const xScale = d3.scaleLinear()
+                .domain([0, 300]) // Fixed range for x-axis
+                .range([0, plotWidth]);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, 300]) // Fixed range for y-axis
+                .range([plotHeight, 0]);
+
+            // Add axes
+            const xAxis = d3.axisBottom(xScale);
+            const yAxis = d3.axisLeft(yScale);
+
+            plotArea.append("g")
+                .attr("transform", `translate(0, ${plotHeight})`)
+                .call(xAxis)
+                .append("text")
+                .attr("x", plotWidth / 2)
+                .attr("y", 40)
+                .attr("fill", "black")
+                .style("text-anchor", "middle")
+                .text("Total Forward Packet");
+
+            plotArea.append("g")
+                .call(yAxis)
+                .append("text")
+                .attr("x", -plotHeight / 2)
+                .attr("y", -40)
+                .attr("transform", "rotate(-90)")
+                .attr("fill", "black")
+                .style("text-anchor", "middle")
+                .text("Total Backward packets");
+
+            // Regression line for all points
+            const regressionAll = linearRegression(uniqueData);
+            const lineAll = d3.line()
+                .x(d => xScale(d["Total Fwd Packet"]))
+                .y(d => yScale(regressionAll.slope * d["Total Fwd Packet"] + regressionAll.intercept));
+
+            plotArea.append("path")
+                .data([uniqueData])
+                .attr("class", "line-legend")
+                .attr("d", lineAll)
+                .attr("stroke", "green")
+                .attr("stroke-width", 2);
+
+            // Calculate standard deviation for outlier detection
+            const deviations = uniqueData.map(d => {
+                const predicted = regressionAll.slope * d["Total Fwd Packet"] + regressionAll.intercept;
+                return Math.abs(d["Total Bwd packets"] - predicted);
+            });
+
+            const meanDev = d3.mean(deviations);
+            const stdev = d3.deviation(deviations);
+
+            // Identify and highlight outliers
+            plotArea.selectAll("circle")
+                .data(uniqueData)
+                .enter()
+                .append("circle")
+                .attr("cx", d => xScale(d["Total Fwd Packet"]))
+                .attr("cy", d => yScale(d["Total Bwd packets"]))
+                .attr("r", 5)
+                .attr("fill", d => {
+                    const predicted = regressionAll.slope * d["Total Fwd Packet"] + regressionAll.intercept;
+                    const deviation = Math.abs(d["Total Bwd packets"] - predicted);
+                    return deviation > (meanDev + 1.5 * stdev) ? "orange" : "steelblue"; // Outlier condition
+                })
+                // Add tooltip interactivity
+                .on("mouseover", (event, d) => {
+                    tooltip.style("opacity", 1)
+                        .html(`Total Fwd Packet: ${d["Total Fwd Packet"]}<br>Total Bwd packets: ${d["Total Bwd packets"]}`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 20) + "px");
+                })
+                .on("mousemove", event => {
+                    tooltip.style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 20) + "px");
+                })
+                .on("mouseout", () => {
+                    tooltip.style("opacity", 0);
+                });
+
+            // Add legend
+            const legend = svg.append("g")
+                .attr("transform", `translate(${width - 150}, ${50})`);
+
+            legend.append("rect")
+                .attr("x", 0)
+                .attr("y", 0)
+                .attr("width", 15)
+                .attr("height", 15)
+                .attr("fill", "green");
+
+            legend.append("text")
+                .attr("x", 20)
+                .attr("y", 12)
+                .text("All points regression")
+                .attr("class", "legend");
+
+        }).catch(error => {
+            console.error("Error loading CSV data:", error);
+        });
+
+        // Linear regression function (y = mx + b)
+        function linearRegression(data) {
+            const n = data.length;
+            const sumX = d3.sum(data, d => d["Total Fwd Packet"]);
+            const sumY = d3.sum(data, d => d["Total Bwd packets"]);
+            const sumXY = d3.sum(data, d => d["Total Fwd Packet"] * d["Total Bwd packets"]);
+            const sumX2 = d3.sum(data, d => d["Total Fwd Packet"] * d["Total Fwd Packet"]);
+
+            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+
+            return { slope, intercept };
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Graph: Src IP and Dst IP</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            height: 100vh;
+            margin-top: 50px;
+        }
+        .container {
+            display: flex;
+            align-items: flex-start;
+        }
+        svg {
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+        }
+        .node {
+            fill: steelblue;
+            stroke: #333;
+            stroke-width: 1.5px;
+        }
+        .node:hover {
+            fill: orange;
+        }
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
+        }
+        .tooltip {
+            position: absolute;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            padding: 5px 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 12px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .legend {
+            display: flex;
+            flex-direction: column;
+            margin-left: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-box {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+        }
+        .legend-line {
+            width: 40px;
+            height: 3px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <button onclick="window.location.href='index.html'">Back to Main Page</button>
+    <div class="container">
+        <svg width="800" height="600"></svg>
+        <!-- Legend Section -->
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-line" style="background-color: #666;"></div>
+                <span>1-2 connections</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="background-color: #333;"></div>
+                <span>3+ connections</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="tooltip" style="opacity: 0;"></div>
+
+    <script>
+        const width = 800;
+        const height = 600;
+
+        const svg = d3.select("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        const tooltip = d3.select(".tooltip");
+
+        // Load the CSV file
+        d3.csv("ACI-IoT-2023 - IP.csv").then(data => {
+            // Limit to 100 rows
+            const limitedData = data.slice(0, 1000);
+
+            console.log("Limited Data:", limitedData); // Debugging step: Check the data
+
+            const nodes = [];
+            const links = [];
+            const connectionCount = {}; // To store connection frequency
+
+            // Helper function to ensure unique nodes
+            function addNode(id) {
+                if (!nodes.find(node => node.id === id)) {
+                    nodes.push({ id, group: "device" });
+                }
+            }
+
+            // Process only the limited data
+            limitedData.forEach(row => {
+                const src = row["Src IP"];
+                const dst = row["Dst IP"];
+
+                // Ensure valid data for Src and Dst IP
+                if (src && dst) {
+                    addNode(src);
+                    addNode(dst);
+
+                    // Create a key for this connection
+                    const linkKey = `${src} -> ${dst}`;
+                    if (!connectionCount[linkKey]) {
+                        connectionCount[linkKey] = 1;
+                    } else {
+                        connectionCount[linkKey]++;
+                    }
+
+                    // Add link (source, target, and connection frequency)
+                    links.push({ source: src, target: dst, count: connectionCount[linkKey] });
+                }
+            });
+
+            console.log("Nodes:", nodes); // Debugging step: Check nodes
+            console.log("Links:", links); // Debugging step: Check links
+
+            // Highlight potential rogue devices
+            nodes.forEach(node => {
+                if (node.id.startsWith("10.")) { // Example heuristic for rogue devices
+                    node.group = "rogue";
+                } else if (node.id.startsWith("192.")) { // Example heuristic for routers
+                    node.group = "router";
+                }
+            });
+
+            // Define the force simulation
+            const simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+                .force("charge", d3.forceManyBody().strength(-100)) // Adjust charge for better spacing
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            // Add links to the SVG
+            const link = svg.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(links)
+                .join("line")
+                .attr("class", "link")
+                .attr("stroke-width", d => Math.min(d.count * 2, 10)) // Scale stroke width based on count
+                .attr("stroke-opacity", 0.6);
+
+            // Add nodes to the SVG
+            const node = svg.append("g")
+                .attr("class", "nodes")
+                .selectAll("circle")
+                .data(nodes)
+                .join("circle")
+                .attr("class", "node")
+                .attr("r", 8)
+                .attr("fill", d => {
+                    if (d.group === "rogue") return "red";
+                    else if (d.group === "router") return "green"; // Ensure router color is green
+                    return "steelblue"; // Default device color
+                })
+                .call(drag(simulation))
+                .on("mouseover", (event, d) => {
+                    tooltip.style("opacity", 1)
+                        .html(`<strong>${d.id}</strong> (${d.group})`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 20) + "px");
+                })
+                .on("mousemove", (event) => {
+                    tooltip.style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 20) + "px");
+                })
+                .on("mouseout", () => {
+                    tooltip.style("opacity", 0);
+                });
+
+            // Update the simulation on each tick
+            simulation.on("tick", () => {
+                link.attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node.attr("cx", d => (d.x = Math.max(8, Math.min(width - 8, d.x))))
+                    .attr("cy", d => (d.y = Math.max(8, Math.min(height - 8, d.y))));
+            });
+
+
+            // Drag functionality
+            function drag(simulation) {
+                function dragStarted(event, d) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                }
+
+                function dragged(event, d) {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                }
+
+                function dragEnded(event, d) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                }
+
+                return d3.drag()
+                    .on("start", dragStarted)
+                    .on("drag", dragged)
+                    .on("end", dragEnded);
+            }
+        }).catch(error => {
+            console.error("Error loading CSV file:", error);
+        });
+    </script>
+</body>
+</html>
